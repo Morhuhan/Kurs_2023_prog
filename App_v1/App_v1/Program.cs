@@ -260,7 +260,7 @@ namespace App_v1
                     Console.WriteLine($"Worker {name} вернул товар {checkTask.product.productName} по накладной поставщику {checkTask.seller.name}");
                     Thread.Sleep(sleepTime);
 
-                    Product product = warehouse.GetTempProduct(checkTask.product.ProductId);
+                    Product product = warehouse.GetTempProduct(checkTask.product.ProductId+1);
                     Thread.Sleep(sleepTime);
                 }
 
