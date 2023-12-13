@@ -3,578 +3,738 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
+using static App_v1.Program;
+using System.Reflection;
+
 
 namespace App_v1
 {
-
-    //////////////////////////////////////////////////// КЛИЕНТЫ
-
-    public class Client
+    internal class Program
     {
-        //public int ID;
-        public TaskSystem ts { get; set; }
-        public Warehouse warehouse;
+        // КОНСТАНТА ВРЕМЕНИ МЕЖДУ ОПОВЕЩЕНИЯМИ
+        public static int sleepTime = 500;
 
-        // УСЛОВНО ИСЧЕРПЫВАЮЩАЯ ИНФОРМАЦИЯ О КЛИЕНТЕ
-        public string name;
-        public string address;
-    }
+        //////////////////////////////////////////////////// КЛИЕНТЫ
 
-    public class Seller : Client
-    {
-        public Product productToSell;
-
-        public Seller(Product product, TaskSystem ts, Warehouse warehouse, string name, string address)
+        public class Client
         {
-            this.productToSell = product;
-            this.name = name;
-            this.ts = ts;
-            this.warehouse = warehouse;
-            this.address = address;
+            public TaskSystem ts;
+            public Warehouse warehouse;
+
+            public string name;
+            public string address;
         }
 
-        public void GetApprovement()
+        public class Seller : Client
         {
-            // Согласует поставку с менеджером
-            ts.AddApprTask(new ApprovementTask(productToSell));
+            public Invoice invoice;
 
-            Console.WriteLine("Seller " + name + " создает заявку на согласование поставки " + productToSell.productName);
+            public Product productToSell;
 
-        }
-
-        public void SellProduct()
-        {
-            // Если товар соотвествует требованиям хранения (проверяют рабочие) и у него есть ID
-            if (productToSell.isAccepted == true)
+            public Seller(Product product, TaskSystem ts, Warehouse warehouse, string name, string address)
             {
-                // Продовец создает заявку, где указывает свои данные и продукт, который он хочет разместить на основном складе
-                ts.AddSellerTask(new SellerTask(this.name, this.address, this.productToSell.ProductId));
-                Console.WriteLine("Seller " + name + " создает заявку на продажу товара с ID " + productToSell.ProductId);
-
-                // Удаляем продукт у продовца, теперь товар оффициально на временном складе
-                Console.WriteLine("Seller " + name + " остался без товара " + productToSell.productName);
-                productToSell = null;
+                this.productToSell = product;
+                this.name = name;
+                this.ts = ts;
+                this.warehouse = warehouse;
+                this.address = address;
             }
-        }
 
-        public void TransportProduct()
-        {
-            // Если поставка согласован (менеджером), то можно привозить товар на временный склад
-            if (productToSell.isApproved == true) {
-
-                // Продовец привзоит товар на временный склад
-                warehouse.AddTempProduct(productToSell);
-                Console.WriteLine("Seller " + name + " привозит " + productToSell.productName + " на временный склад");
-
-                // Рабочие тут же проверяют поступивший товар и присваивают ему ID
-                ts.AddCheckTask(new CheckTask(productToSell));
-                Console.WriteLine("Seller " + name + " создает заявку на проверку товара " + productToSell.productName);
-            }
-        }
-    }
-
-    public class Buyer : Client
-    {
-        int productID;
-
-        public Buyer(int productID, TaskSystem ts, Warehouse warehouse, string name, string address)
-        {
-            this.name = name;
-            this.ts = ts;
-            this.warehouse = warehouse;
-            this.address = address;
-            this.productID = productID;
-        }
-    }
-
-    //////////////////////////////////////////////////// ПЕРСОНАЛ
-
-    public class Staff
-    {
-        //public int id { set; get; }
-        public string name { set; get; }
-        public TaskSystem ts { set; get; }
-    }
-
-    public class Manager : Staff
-    {
-        public SellerTask sellerTask = null;
-        public ApprovementTask apprTask = null;
-
-        private static int nextId = 1; // Статическая переменная для отслеживания следующего уникального ID
-
-        public Manager(string name, TaskSystem ts)
-        {
-            this.name = name;
-            this.ts = ts;
-        }
-
-        public void GetSellerTask()
-        {
-            this.sellerTask = ts.GetManagerSellerTask();
-            Console.WriteLine("Менеджер " + name + " взял в исполнение заявку по продаже товара c ID " + sellerTask.productID);
-        }
-
-        public void GetApprTask()
-        {
-            this.apprTask = ts.GetApprTask();
-        }
-
-
-        public void SolveSellerTask()
-        {
-            // Создает задачу для Keeper, чтобы он  проверил и разместил товар на складе
-            ts.AddKeeperTask(new KeeperTask(sellerTask.productID));
-            Console.WriteLine("Менеджер " + name + " создал заявку на размещение товара с ID " + sellerTask.productID + " на основной склад");
-
-            // Менеджер помечает задачу как выполненную и может брать новую
-            sellerTask.Execute();
-        }
-
-        // Менеджер может согласовать товар на поступление
-        public void SolveApprTask()
-        {
-            apprTask.product.isApproved = true;
-            apprTask.Execute();
-            Console.WriteLine("Manager " + name + " согласовал для поставки товар " + apprTask.product.productName);
-
-        }
-
-
-
-
-        // По накладной, хранящейся в базе данных?
-        public void ReturnProductToSeller()
-        {
-
-        }
-
-
-    }
-
-    public class Worker : Staff
-    {
-        CheckTask checkTask = null;
-        TransportTask transportTask = null;
-        public PurchaseTask purchaseTask = null;
-
-        Warehouse warehouse;
-
-        private static int nextId = 1; // Статическая переменная для отслеживания следующего уникального ID
-
-        public Worker(string name, TaskSystem ts, Warehouse warehouse)
-        {
-            this.name = name;
-            this.ts = ts;
-            this.warehouse = warehouse;
-        }
-
-        public void GetCheckTask()
-        {
-            this.checkTask = ts.GetCheckTask();
-            Console.WriteLine("Worker " + name + " взял в исполнение задачу на проверку товара " + checkTask.product.productName);
-        }
-
-        public void SolveCheckTask()
-        {
-            checkTask.product.isAccepted = true;
-            Console.WriteLine("Worker " + name + " присвоил товару " + checkTask.product.productName + " статус accepted");
-
-            checkTask.product.ProductId = nextId++;
-            Console.WriteLine("Worker " + name + " присвоил товару " + checkTask.product.productName + " ID " + checkTask.product.ProductId);
-        
-            checkTask.Execute();
-
-        }
-
-        public void GetPurchaseTask()
-        {
-            this.purchaseTask = ts.GetManagerPurchaseTask();
-        }
-
-        public void GetTransportTask()
-        {
-            this.transportTask = ts.GetTransportTask();
-            Console.WriteLine("Worker " + name + " взял в исполнение задачу на перевозку товара с ID " + transportTask.productID + " на основной склад.");
-        }
-
-        public void SolveTransportTask()
-        {
-            warehouse.TransportToMain(transportTask.productID);
-            Console.WriteLine("Worker " + name + " перенес товар с ID " + transportTask.productID + " на основной склад");
-
-            transportTask.Execute();
-        }
-
-        public void SolvePurchaseTask()
-        {
-            Console.WriteLine("Worker " + name + " отправил товар " + purchaseTask.productID + " клиенту по адресу " + purchaseTask.clientAddress);
-           
-            purchaseTask.Execute();
-        }
-    }
-
-    public class Keepper : Staff
-    {
-        public KeeperTask keeperTask = null;
-        public Warehouse warehouse;
-
-        public Keepper(string name, TaskSystem ts, Warehouse warehouse)
-        {
-            this.name = name;
-            this.ts = ts;
-            this.warehouse = warehouse;
-        }
-
-        public void GetKeeperTask()
-        {
-            this.keeperTask = ts.GetKeeperTask();
-            Console.WriteLine("Keeper " + name + " взял в исполнение заявку по размещению товара с ID " + keeperTask.productID);
-        }
-
-        public void SolveKeeperTask()
-        {
-            // Назначает рабочим место, куда нужно разместить указанный товар
-            ts.AddTransportTask(new TransportTask(keeperTask.productID, warehouse));
-            Console.WriteLine("Keeper " + name + " назначил рабочим разместить на основной склад товар с ID " + keeperTask.productID);
-
-            keeperTask.Execute();
-        }
-    }
-
-    //////////////////////////////////////////////////// ПРОДУКТ
-
-    public class Product
-    {
-        public string productName;
-        public bool meetRequirements;
-
-        // Свойство для хранения уникального ID
-        public int ProductId { get; set; } 
-
-        // Перед тем, как привезти твар, ему нужно присвоить уникальный ID
-        public string sellerID;
-
-        // Товар согласован для хранения
-        public bool isApproved = false;
-
-        // Товар принят на хранение
-        public bool isAccepted = false;
-
-        public Product(bool mR, string name)
-        {
-            this.meetRequirements = mR;
-            this.productName = name;
-        }
-    }
-
-    //////////////////////////////////////////////////// СКЛАД
-
-    public class Warehouse
-    {
-        // Временный склад
-        Product[] tempProducts = new Product[10];
-
-        // Основной склад
-        Product[] mainProducts = new Product[10];
-
-        public void AddTempProduct(Product product)
-        {
-            tempProducts[0] = product;
-        }
-
-        // Получить товар со временного склада по ID товара
-        public Product GetTempProduct(int id)
-        {
-            return tempProducts[0];
-        }
-
-        // Переместить товар с временного склада в основной по ID
-        public void TransportToMain(int id)
-        {
-            mainProducts[0] = tempProducts[0];
-        }
-    }
-
-    //////////////////////////////////////////////////// ЗАДАЧИ
-
-    public class TaskSystem
-    {
-        private Stack<PurchaseTask> PurchaseTasks = new Stack<PurchaseTask>();
-        private Stack<SellerTask> sellerTasks = new Stack<SellerTask>();
-        private Stack<ApprovementTask> apprTasks = new Stack<ApprovementTask>();
-        private Stack<CheckTask> checkTasks = new Stack<CheckTask>();
-        private Stack<KeeperTask> keeperTasks = new Stack<KeeperTask>();
-        private Stack<TransportTask> transportTasks = new Stack<TransportTask>();
-
-
-        public void AddPurchaseTask(PurchaseTask task)
-        {
-            PurchaseTasks.Push(task);
-        }
-
-        public void AddSellerTask(SellerTask task)
-        {
-            sellerTasks.Push(task);
-        }
-
-        public void AddApprTask(ApprovementTask task)
-        {
-            apprTasks.Push(task);
-        }
-
-        public void AddCheckTask(CheckTask task)
-        {
-            checkTasks.Push(task);
-        }
-
-        public void AddTransportTask(TransportTask task)
-        {
-            transportTasks.Push(task);
-        }
-
-        public void AddKeeperTask(KeeperTask task)
-        {
-            keeperTasks.Push(task);
-        }
-
-        public PurchaseTask GetManagerPurchaseTask()
-        {
-            if (PurchaseTasks.Count > 0)
+            public void GetApprovement()
             {
-                return PurchaseTasks.Pop();
+                // Согласует поставку с менеджером
+                Console.WriteLine("Seller " + name + " создает заявку на согласование поставки товара " + productToSell.productName);
+                ts.AddApprTask(new ApprovementTask(productToSell));
+                Thread.Sleep(sleepTime);
             }
-            else
+
+            public void SellProduct()
             {
-                return null;
+                // Если товар соотвествует требованиям хранения (проверяют рабочие) и у него есть ID
+                if (productToSell.isAccepted == true)
+                {
+                    // Продовец создает заявку, где указывает свои данные и продукт, который он хочет разместить на основном складе
+                    Console.WriteLine("Seller " + name + " создает заявку на продажу товара с ID " + productToSell.ProductId);
+
+                    ts.AddSellerTask(new SellerTask(this.name, this.address, this.productToSell.ProductId));
+                    Thread.Sleep(sleepTime);
+
+                    // Удаляем продукт у продовца, теперь товар оффициально на временном складе
+                    Console.WriteLine("Seller " + name + " остался без товара " + productToSell.productName);
+                    productToSell = null;
+                }
+            }
+
+            public void TransportProduct()
+            {
+                // Если поставка согласован (менеджером), то можно привозить товар на временный склад
+                if (productToSell.isApproved == true)
+                {
+
+                    // Продовец привзоит товар на временный склад
+                    Console.WriteLine("Seller " + name + " привозит товар " + productToSell.productName + " на временный склад");
+                    Thread.Sleep(sleepTime);
+
+                    warehouse.AddTempProduct(productToSell);
+                    Thread.Sleep(sleepTime);
+
+                    // Рабочие тут же проверяют поступивший товар и присваивают ему ID
+                    Console.WriteLine("Seller " + name + " создает заявку на проверку товара " + productToSell.productName);
+                    ts.AddCheckTask(new CheckTask(productToSell, this));
+                    Thread.Sleep(sleepTime);
+                }
             }
         }
 
-        public SellerTask GetManagerSellerTask()
+        public class Buyer : Client
         {
-            if (sellerTasks.Count > 0)
+            public int productID;
+
+            public void BuyProduct()
+            {
+                Console.WriteLine($"Покупатель {name} оплатил товар с ID {productID}");
+                ts.AddPaymentTask(new PaymentTask(this.name, productID));
+
+                Console.WriteLine($"Покупатель {name} хочет купить товар с ID {productID}");
+                ts.AddPurchaseTask(new PurchaseTask(1, this.address));
+            }
+
+            public Buyer(int productID, TaskSystem ts, Warehouse warehouse, string name, string address)
+            {
+                this.name = name;
+                this.ts = ts;
+                this.warehouse = warehouse;
+                this.address = address;
+                this.productID = productID;
+            }
+        }
+
+        //////////////////////////////////////////////////// ПЕРСОНАЛ
+
+        public class Staff
+        {
+            public string name;
+            public TaskSystem ts;
+        }
+
+        public class Manager : Staff
+        {
+            public SellerTask sellerTask;
+            public ApprovementTask apprTask;
+            public PaymentTask paymTask;
+
+            public DataBase dataBase;
+
+            public Manager(string name, TaskSystem ts, DataBase dataBase)
+            {
+                this.name = name;
+                this.ts = ts;
+                this.dataBase = dataBase;
+            }
+
+            public void GetSellerTask()
+            {
+                this.sellerTask = ts.GetSellerTask();
+                Console.WriteLine("Менеджер " + name + " взял в исполнение заявку по продаже товара c ID " + sellerTask.productID);
+                Thread.Sleep(sleepTime);
+            }
+
+            public void GetApprTask()
+            {
+                this.apprTask = ts.GetApprTask();
+                Console.WriteLine("Менеджер " + name + " взял в исполнение заявку по согласованию поставки товара " + apprTask.product.productName);
+                Thread.Sleep(sleepTime);
+            }
+
+            public void GetPaymTask()
+            {
+                this.paymTask = ts.GetPaymentTask();
+                Console.WriteLine("Менеджер " + name + " взял в исполнение заявку по оплате товара с ID " + paymTask.productID);
+                Thread.Sleep(sleepTime);
+            }
+
+
+            public void SolveSellerTask()
+            {
+                // Создает задачу для Keeper, чтобы он  проверил и разместил товар на складе
+                ts.AddKeeperTask(new KeeperTask(sellerTask.productID));
+                Console.WriteLine("Менеджер " + name + " создает заявку на размещение товара с ID " + sellerTask.productID + " на основной склад");
+
+                // Менеджер помечает задачу как выполненную и может брать новую
+                sellerTask.Execute();
+                Thread.Sleep(sleepTime);
+            }
+
+            public void SolveApprTask()
+            {
+                apprTask.product.isApproved = true;
+                Console.WriteLine("Manager " + name + " согласовал для поставки товар " + apprTask.product.productName);
+                Thread.Sleep(sleepTime);
+                apprTask.Execute();
+            }
+
+            public void SolvePaymTask()
+            {
+                // Ищет в базе данных накладную на товар из заявки
+                Invoice inv = dataBase.Invoices[paymTask.productID-1];
+                dataBase.Invoices.Remove(inv);
+
+                Console.WriteLine($"Manager {name} отправил поставщику {inv.sellerName} сумму {inv.productPrice} до вычета комиссии");
+                dataBase.Invoices.Remove(inv);
+
+                paymTask.Execute();
+            }
+        }
+
+        public class Worker : Staff
+        {
+            public CheckTask checkTask;
+            public TransportTask transportTask;
+            public PurchaseTask purchaseTask;
+            public Warehouse warehouse;
+            public DataBase dataBase;
+
+            private static int nextProductId = 1;
+
+            public Worker(string name, TaskSystem ts, Warehouse warehouse, DataBase dataBase)
+            {
+                this.name = name;
+                this.ts = ts;
+                this.warehouse = warehouse;
+                this.dataBase = dataBase;
+            }
+
+            public void GetCheckTask()
+            {
+                this.checkTask = ts.GetCheckTask();
+                Console.WriteLine("Worker " + name + " взял в исполнение задачу на проверку товара " + checkTask.product.productName);
+                Thread.Sleep(sleepTime);
+            }
+
+            public void GetPurchaseTask()
+            {
+                this.purchaseTask = ts.GetPurchaseTask();
+                Console.WriteLine("Worker " + name + " взял в исполнение задачу на покупку товара");
+                Thread.Sleep(sleepTime);
+            }
+
+            public void GetTransportTask()
+            {
+                this.transportTask = ts.GetTransportTask();
+                Console.WriteLine("Worker " + name + " взял в исполнение задачу на перевозку товара с ID " + transportTask.productID + " на основной склад.");
+                Thread.Sleep(sleepTime);
+            }
+
+            public void SolveCheckTask()
+            {
+                Console.WriteLine($"Worker {name} создет накладную на товар {checkTask.product.productName} для поставщика {checkTask.seller.name}");
+                checkTask.seller.invoice = new Invoice(checkTask.seller.name, checkTask.seller.address, checkTask.product.productName, checkTask.product.productPrice);
+                Thread.Sleep(sleepTime);
+
+                Console.WriteLine($"Worker {name} добавляет накладную в базу данных");
+                dataBase.Invoices.Add(checkTask.seller.invoice);
+                Thread.Sleep(sleepTime);
+
+                if (checkTask.product.meetRequirements == true)
+                {
+                    checkTask.product.isAccepted = true;
+                    Console.WriteLine("Worker " + name + " присвоил товару " + checkTask.product.productName + " статус accepted");
+                    Thread.Sleep(sleepTime);
+
+
+                    checkTask.product.ProductId = nextProductId++;
+                    Console.WriteLine("Worker " + name + " присвоил товару " + checkTask.product.productName + " ID " + checkTask.product.ProductId);
+                    Thread.Sleep(sleepTime);
+                }
+
+                else
+                {
+                    Console.WriteLine($"Товар {checkTask.product.productName} не прошел проверку");
+                    Thread.Sleep(sleepTime);
+
+                    Console.WriteLine($"Worker {name} присвоил накладной поставщика {checkTask.product.productName} статус возврата");
+                    Thread.Sleep(sleepTime);
+
+                    checkTask.seller.invoice.isReturn = true;
+                    Console.WriteLine($"Worker {name} вернул товар {checkTask.product.productName} по накладной поставщику {checkTask.seller.name}");
+                    Thread.Sleep(sleepTime);
+
+                    Product product = warehouse.GetTempProduct(checkTask.product.ProductId);
+                    Thread.Sleep(sleepTime);
+                }
+
+                checkTask.Execute();
+            }
+
+            public void SolvePurchaseTask()
+            {
+                Product product = warehouse.GetMainProduct(purchaseTask.productID);
+
+                Console.WriteLine("Worker " + name + " отправил товар " + product.productName + " клиенту по адресу " + purchaseTask.clientAddress);
+                Thread.Sleep(sleepTime);
+
+                Thread.Sleep(sleepTime);
+
+                purchaseTask.Execute();
+                Thread.Sleep(sleepTime);
+            }
+
+            public void SolveTransportTask()
+            {
+                warehouse.MoveProduct(transportTask.productID);
+                Console.WriteLine("Worker " + name + " перенес товар с ID " + transportTask.productID + " на основной склад");
+                Thread.Sleep(sleepTime);
+
+                transportTask.Execute();
+
+            }
+        }
+
+        public class Keepper : Staff
+        {
+            public KeeperTask keeperTask;
+            public Warehouse warehouse;
+
+            public Keepper(string name, TaskSystem ts, Warehouse warehouse)
+            {
+                this.name = name;
+                this.ts = ts;
+                this.warehouse = warehouse;
+            }
+
+            public void GetKeeperTask()
+            {
+                this.keeperTask = ts.GetKeeperTask();
+                Console.WriteLine("Keeper " + name + " взял в исполнение заявку по размещению товара с ID " + keeperTask.productID);
+                Thread.Sleep(sleepTime);
+            }
+
+            public void SolveKeeperTask()
+            {
+                // Назначает рабочим место, куда нужно разместить указанный товар
+                Console.WriteLine("Keeper " + name + " назначил рабочим разместить на основной склад товар с ID " + keeperTask.productID);
+                ts.AddTransportTask(new TransportTask(keeperTask.productID, warehouse));
+                Thread.Sleep(sleepTime);
+                keeperTask.Execute();
+            }
+        }
+        //////////////////////////////////////////////////// НАКЛАДНАЯ
+
+        public class Invoice
+        {
+            public string sellerName;
+
+            public string sellerAddress;
+
+            public string productName;
+
+            public int productPrice;
+
+            public bool isReturn;
+
+            public Invoice(string sellerName, string sellerAddress, string productName, int productPrice)
+            {
+                this.sellerName = sellerName;
+                this.sellerAddress = sellerAddress;
+                this.productName = productName;
+                isReturn = false;
+                this.productPrice = productPrice;
+            }
+        }
+
+        public class DataBase
+        {
+            public List<Invoice> Invoices;
+
+            public DataBase() { Invoices = new List<Invoice>(); }
+
+        }
+
+
+        //////////////////////////////////////////////////// ПРОДУКТ
+
+        public class Product
+        {
+            public int productPrice;
+            public string productName;
+            public bool meetRequirements;
+
+            // Свойство для хранения уникального ID
+            public int ProductId { get; set; }
+
+            // Товар согласован для хранения
+            public bool isApproved = false;
+
+            // Товар принят на хранение
+            public bool isAccepted = false;
+
+            public Product(bool mR, string name, int productPrice)
+            {
+                this.meetRequirements = mR;
+                this.productName = name;
+                this.productPrice = productPrice;
+            }
+        }
+
+        //////////////////////////////////////////////////// СКЛАД
+
+        public class Warehouse
+        {
+            // Временный склад
+            public List<Product> tempProducts;
+
+            // Основной склад
+            public List<Product> mainProducts;
+
+            public Warehouse()
+            {
+                tempProducts = new List<Product>();
+                mainProducts = new List<Product>();
+            }
+
+            public void AddTempProduct(Product product)
+            {
+                Console.WriteLine($"Товар {product.productName} успешно перемещен на временный склад.");
+                tempProducts.Add(product);
+            }
+
+            public void MoveProduct(int productId)
+            {
+                // Находим Товар в tempProducts по productID
+                Product productToMove = tempProducts.Find(p => p.ProductId == productId);
+
+                // Если Товар найден, добавляем его в mainProducts и удаляем из tempProducts
+                if (productToMove != null)
+                {
+                    mainProducts.Add(productToMove);
+                    tempProducts.Remove(productToMove);
+
+                    Console.WriteLine($"Товар с ID {productId} успешно перемещен на основной склад.");
+                }
+                else
+                {
+                    Console.WriteLine($"Товар с ID {productId} не найден на временном складе.");
+                }
+            }
+
+            public Product GetTempProduct(int id)
+            {
+                id--;
+                Console.WriteLine($"Товар {tempProducts[id].productName} забрали с временного склада.");
+                Product product = tempProducts[id];
+                tempProducts.RemoveAt(id);
+                return product;
+            }
+
+            public Product GetMainProduct(int id)
+            {
+                id--;
+
+                Console.WriteLine($"Товар {mainProducts[id].productName} забрали с основного склада.");
+                Product product = mainProducts[id];
+                mainProducts.RemoveAt(id);
+                return product;
+            }
+        }
+
+        //////////////////////////////////////////////////// ЗАДАЧИ
+
+        public class TaskSystem
+        {
+            private Stack<PurchaseTask> purchaseTasks;
+            private Stack<SellerTask> sellerTasks;
+            private Stack<ApprovementTask> apprTasks;
+            private Stack<CheckTask> checkTasks;
+            private Stack<KeeperTask> keeperTasks;
+            private Stack<TransportTask> transportTasks;
+            private Stack<ReturnTask> returnTasks;
+            private Stack<PaymentTask> paymentTasks;
+
+
+            public TaskSystem()
+            {
+                purchaseTasks = new Stack<PurchaseTask>();
+                sellerTasks = new Stack<SellerTask>();
+                apprTasks = new Stack<ApprovementTask>();
+                checkTasks = new Stack<CheckTask>();
+                keeperTasks = new Stack<KeeperTask>();
+                transportTasks = new Stack<TransportTask>();
+                returnTasks = new Stack<ReturnTask>();
+                paymentTasks = new Stack<PaymentTask>();
+            }
+
+            public void AddPaymentTask(PaymentTask task)
+            {
+                paymentTasks.Push(task);
+            }
+
+            public void AddReturnTask(ReturnTask task)
+            {
+                returnTasks.Push(task);
+            }
+
+            public void AddPurchaseTask(PurchaseTask task)
+            {
+                purchaseTasks.Push(task);
+            }
+
+            public void AddSellerTask(SellerTask task)
+            {
+                sellerTasks.Push(task);
+            }
+
+            public void AddApprTask(ApprovementTask task)
+            {
+                apprTasks.Push(task);
+            }
+
+            public void AddCheckTask(CheckTask task)
+            {
+                checkTasks.Push(task);
+            }
+
+            public void AddTransportTask(TransportTask task)
+            {
+                transportTasks.Push(task);
+            }
+
+            public void AddKeeperTask(KeeperTask task)
+            {
+                keeperTasks.Push(task);
+            }
+
+            public ReturnTask GetReturnTask()
+            {
+                return returnTasks.Pop();
+            }
+
+            public PaymentTask GetPaymentTask()
+            {
+                return paymentTasks.Pop();
+            }
+
+            public PurchaseTask GetPurchaseTask()
+            {
+                return purchaseTasks.Pop();
+            }
+
+            public SellerTask GetSellerTask()
             {
                 return sellerTasks.Pop();
             }
-            else
-            {
-                return null;
-            }
-        }
 
-        public ApprovementTask GetApprTask()
-        {
-            if (apprTasks.Count > 0)
+            public ApprovementTask GetApprTask()
             {
                 return apprTasks.Pop();
             }
-            else
-            {
-                return null;
-            }
-        }
 
-        public CheckTask GetCheckTask()
-        {
-            if (checkTasks.Count > 0)
+            public CheckTask GetCheckTask()
             {
                 return checkTasks.Pop();
             }
-            else
-            {
-                return null;
-            }
-        }
 
-        public TransportTask GetTransportTask()
-        {
-            if (transportTasks.Count > 0)
+            public TransportTask GetTransportTask()
             {
                 return transportTasks.Pop();
             }
-            else
-            {
-                return null;
-            }
-        }
 
-        public KeeperTask GetKeeperTask()
-        {
-            if (keeperTasks.Count > 0)
+            public KeeperTask GetKeeperTask()
             {
                 return keeperTasks.Pop();
             }
-            else
+        }
+
+        public class Document
+        {
+            private static int nextDocumentID = 1;
+
+            public int DocumentID;
+            public DocumentStatus Status;
+
+            public Document()
             {
-                return null;
+                Thread.Sleep(sleepTime);
+                DocumentID = nextDocumentID++;
+                Console.WriteLine($"Создана заявка с ID {DocumentID}. {CheckDocType()}");
+                Status = DocumentStatus.UnderReview;
+                Thread.Sleep(sleepTime);
+            }
+
+            public void Execute()
+            {
+                Console.WriteLine($"Выполнена заявка с ID {DocumentID}. {CheckDocType()}");
+                Status = DocumentStatus.Executed;
+                Thread.Sleep(sleepTime);
+            }
+
+            // Метод для проверки типа документа и вывода сообщения
+            public string CheckDocType()
+            {
+                if (this is ReturnTask)
+                {
+                    return "Возврат товара";
+                }
+                else if (this is PurchaseTask)
+                {
+                    return "Покупка товара";
+                }
+                else if (this is SellerTask)
+                {
+                    return "Продажа товара";
+                }
+                else if (this is KeeperTask)
+                {
+                    return "Размещение товара";
+                }
+                else if (this is ApprovementTask)
+                {
+                    return "Согласование поставки";
+                }
+                else if (this is TransportTask)
+                {
+                    return "Размещение товара на основном складе";
+                }
+                else if (this is CheckTask)
+                {
+                    return "Проверка товара";
+                }
+                else if (this is PaymentTask)
+                {
+                    return "Оплата товара";
+                }
+                else
+                {
+                    return null;
+                }
             }
         }
-    }
 
-    public class Document
-    {
-        private static int nextDocumentID = 1;
-
-        public int DocumentID { get; private set; }
-        public DocumentStatus Status { get; set; }
-
-        public Document()
+        public enum DocumentStatus
         {
-            DocumentID = nextDocumentID++;
-            Console.WriteLine($"Создана заявка с ID {DocumentID}");
-            Status = DocumentStatus.UnderReview; 
+            UnderReview,
+            AcceptedForExecution,
+            Executed,
+            Archived
         }
 
-        public virtual void Execute()
+        public class PaymentTask : Document
         {
-            Console.WriteLine($"Выполнена заявка с ID {DocumentID}");
-            Status = DocumentStatus.Executed;
-        }
-    }
+            public string buyerName;
 
-    public enum DocumentStatus
-    {
-        UnderReview,
-        AcceptedForExecution,
-        Executed,
-        Archived
-    }
+            public int productID;
 
-    public class PurchaseTask : Document
-    {
-        public int productID;
-
-        public string clientAddress;
-
-        public PurchaseTask(int productID, string clientAddress)
-        {
-            this.productID = productID;
-            this.clientAddress = clientAddress;
-        }
-    }
-
-    // Заявка создается продовцом
-    public class SellerTask : Document
-    {
-        // Поля, заполняемые менеджером
-        public int productID;
-
-        public int sellerID { set; get; }
-
-        public string sellerName { get; }
-
-        public string sellerAddress { get; }
-
-        public SellerTask(string address, string name, int productID)
-        {
-            this.sellerName = name;
-            this.sellerAddress = address;
-            this.productID = productID;
-        }
-    }
-
-    // Кладовщик решает, как резместить товар
-    public class KeeperTask : Document
-    {
-        public int productID;
-
-        public KeeperTask(int productID)
-        {
-            this.productID = productID;
+            public PaymentTask(string buyerName, int productID)
+            {
+                this.buyerName = buyerName;
+                this.productID = productID;
+            }
         }
 
-    }
 
-    // Менеджер решает, принять товар на склад или нет
-    public class ApprovementTask : Document
-    {
-        public Product product { get; set; }
-
-        public ApprovementTask(Product product)
+        public class ReturnTask : Document
         {
-            this.product = product;
+            public string clientAddr;
+            public string clientName;
+
+            public ReturnTask(string clientAddr, string clientName)
+            {
+                this.clientAddr = clientAddr;
+                this.clientName = clientName;
+            }
         }
-    }
 
-    // Работник проверяет поступивший на temp склад товар
-    public class CheckTask : Document
-    {
-        public Product product;
-
-        public CheckTask(Product product)
+        public class PurchaseTask : Document
         {
-            this.product = product;
+            public int productID;
+
+            public string clientAddress;
+
+            public PurchaseTask(int productID, string clientAddress)
+            {
+                this.productID = productID;
+                this.clientAddress = clientAddress;
+            }
         }
-    }
 
-    // Работник размещает товар на основной склад
-    public class TransportTask : Document
-    {
-        public int productID;
-
-        public Warehouse wh;
-
-        // Нужно ID товара и место на складе
-        public TransportTask(int productID, Warehouse wh)
+        // Заявка создается продовцом
+        public class SellerTask : Document
         {
-            this.productID = productID;
-            this.wh = wh;
-        }
-    }
+            // Поля, заполняемые менеджером
+            public int productID;
 
-    internal class Program
-    {
+            public string sellerName;
+
+            public string sellerAddress;
+
+            public SellerTask(string address, string name, int productID)
+            {
+                this.sellerName = name;
+                this.sellerAddress = address;
+                this.productID = productID;
+            }
+        }
+
+        // Кладовщик решает, как резместить товар
+        public class KeeperTask : Document
+        {
+            public int productID;
+
+            public KeeperTask(int productID)
+            {
+                this.productID = productID;
+            }
+
+        }
+
+        // Менеджер решает, принять товар на склад или нет
+        public class ApprovementTask : Document
+        {
+            public Product product;
+
+            public ApprovementTask(Product product)
+            {
+                this.product = product;
+            }
+        }
+
+        // Работник проверяет поступивший на temp склад товар
+        public class CheckTask : Document
+        {
+            public Product product;
+
+            public Seller seller;
+
+            public CheckTask(Product product, Seller seller)
+            {
+                this.product = product;
+                this.seller = seller;
+            }
+        }
+
+        // Работник размещает товар на основной склад
+        public class TransportTask : Document
+        {
+            public int productID;
+
+            public Warehouse wh;
+
+            // Нужно ID товара и место на складе
+            public TransportTask(int productID, Warehouse wh)
+            {
+                this.productID = productID;
+                this.wh = wh;
+            }
+        }
+
         static void Main(string[] args)
         {
-            TaskSystem ts = new TaskSystem();
+            Demonstration demo = new Demonstration();
 
-            Warehouse wh = new Warehouse();
-
-            Product product1 = new Product(true, "Колбаса");
-
-            Seller seller1 = new Seller(product1, ts, wh,  "Gosha", "Chelyabinsk");
-
-            Buyer buyer1 = new Buyer(2, ts, wh, "Ivan", "Chelyabinsk");
-
-            Manager manager1 = new Manager("Oleg", ts);
-
-            Worker worker1 = new Worker("Grisha", ts, wh);
-
-            Keepper keepper1 = new Keepper("Misha", ts, wh);
-
-            // Продавец пробует согласовать поставку
-            seller1.GetApprovement();
-
-            // Менеджер решает соглисовать поставку или нет
-            manager1.GetApprTask();
-            manager1.SolveApprTask();
-
-            // Поставщик привозит товар на временный склад, где товар сразу проверяют работники склада и присваивают ему ID (Могут вернуть)
-            seller1.TransportProduct();
-
-            worker1.GetCheckTask();
-            worker1.SolveCheckTask();
-
-            // Если проверка товара прошла успешно, поставщик создает заяку по размещению товара на основном складе
-            seller1.SellProduct();
-
-            // Менеджер обрабатывает заявку на поставку
-            manager1.GetSellerTask();
-            manager1.SolveSellerTask();
-
-            // Хранитель решает свою задачу, путем создания CheckTask и TransportTask для Worker
-            keepper1.GetKeeperTask();
-            keepper1.SolveKeeperTask();
-
-            // рабочий переносит товар из временного хранилиша в основное
-            worker1.GetTransportTask();
-            worker1.SolveTransportTask();
-
-            // Покупатель хочет купить товар
-            buyer1.ts.AddPurchaseTask(new PurchaseTask(1, buyer1.address));
-
-            worker1.GetPurchaseTask();
-            worker1.SolvePurchaseTask();
+            demo.Demonstrate();
         }
     }
 }
+
+
+
