@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static App_v1.Program;
+using static App_v1.WarehouseSystem;
 
 namespace App_v1
 {
@@ -90,29 +90,29 @@ namespace App_v1
 
                     Product product = CreateProduct();
 
-                    client = new Seller(product, ts, wh, clientName, clientAddr);
+                    client = new Supplier(product, ts, wh, clientName, clientAddr);
 
                     // Продавец пробует согласовать поставку
-                    ((Seller)client).GetApprovement();
+                    ((Supplier)client).GetApprovement();
 
                     // Менеджер решает соглисовать поставку или нет
                     manager1.GetApprTask();
                     manager1.SolveApprTask();
 
                     // Поставщик привозит товар на временный склад, где товар сразу проверяют работники склада и присваивают ему ID (Могут вернуть)
-                    ((Seller)client).TransportProduct();
+                    ((Supplier)client).TransportProduct();
 
                     worker1.GetCheckTask();
                     worker1.SolveCheckTask();
 
-                    if (((Seller)client).invoice.isReturn != true)
+                    if (((Supplier)client).invoice.isReturn != true)
                     {
                         // Если проверка товара прошла успешно, поставщик создает заяку по размещению товара на основном складе
-                        ((Seller)client).SellProduct();
+                        ((Supplier)client).SellProduct();
 
                         // Менеджер обрабатывает заявку на поставку
-                        manager1.GetSellerTask();
-                        manager1.SolveSellerTask();
+                        manager1.GetSupplierTask();
+                        manager1.SolveSupplierTask();
 
                         // Хранитель решает свою задачу, путем создания CheckTask и TransportTask для Worker
                         keepper1.GetKeeperTask();
@@ -166,10 +166,10 @@ namespace App_v1
 
 
 
-                    client = new Buyer(productID, ts, wh, clientName, clientAddr);
+                    client = new Customer(productID, ts, wh, clientName, clientAddr);
 
                     // Покупатель оплачивает и получает товар
-                    ((Buyer)client).BuyProduct();
+                    ((Customer)client).BuyProduct();
 
                     worker1.GetPurchaseTask();
                     worker1.SolvePurchaseTask();
