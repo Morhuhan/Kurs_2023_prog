@@ -147,9 +147,8 @@ namespace App_v1
                         {
                             if (wh.mainProducts.Any(product => product.ProductId == productID))
                             {
-                                // ID товара существует, выполните нужные действия
                                 Console.WriteLine($"Вы выбрали товар с ID {productID}");
-                                flag = 1; // Выход из цикла
+                                flag = 1; 
                             }
                             else
                             {
@@ -162,8 +161,6 @@ namespace App_v1
                         }
 
                     } while (flag != 1);
-
-
 
 
                     client = new Customer(productID, ts, wh, clientName, clientAddr);
@@ -237,12 +234,23 @@ namespace App_v1
 
             } while (mRInput != "1" && mRInput != "2");
 
-            Console.WriteLine("Укажите цену продукта");
-            int price = int.Parse(Console.ReadLine());
+            while (true)
+            {
+                Console.WriteLine("Укажите цену продукта");
 
-            Product product = new Product(mR, productInput, price);
-
-            return product;
+                // Попытка преобразовать введенное значение в целое число
+                if (int.TryParse(Console.ReadLine(), out int price))
+                {
+                    // Ввод успешен, создаем объект Product и возвращаем его
+                    Product product = new Product(mR, productInput, price);
+                    return product;
+                }
+                else
+                {
+                    // Выводим сообщение об ошибке при неверном вводе
+                    Console.WriteLine("Пожалуйста, введите цену в числовом формате.");
+                }
+            }
         }
     }
 }
